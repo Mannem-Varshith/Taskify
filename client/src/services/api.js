@@ -1,7 +1,17 @@
 import axios from 'axios';
 
+// Ensure the API URL always includes /api prefix
+const getBaseURL = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    // If VITE_API_URL is set, append /api if not already present
+    return apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
+  }
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: getBaseURL(),
 });
 
 api.interceptors.request.use((config) => {

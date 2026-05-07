@@ -22,7 +22,7 @@ const HeroSection = () => {
           >
             <span className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 mb-6 border border-indigo-100 dark:border-indigo-800">
               <span className="flex w-2 h-2 rounded-full bg-indigo-600 mr-2 animate-pulse"></span>
-              Taskify 2.0 is now live
+              Taskify is now live
             </span>
           </motion.div>
 

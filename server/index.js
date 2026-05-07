@@ -7,19 +7,24 @@ const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
-// Connect to DB
-connectDB();
-
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: process.env.CLIENT_URL || 'http://localhost:5173', methods: ['GET', 'POST'] },
-});
 
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(morgan('dev'));
+
+// Health check endpoint (before other routes)
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', message: 'Server is running' }));
+app.get('/', (req, res) => res.json({ message: 'Team Task Manager API is running 🚀' }));
+
+// Connect to DB (non-blocking)
+connectDB();
+
+const io = new Server(server, {
+  cors: { origin: process.env.CLIENT_URL || 'http://localhost:5173', methods: ['GET', 'POST'] },
+});
 
 // Attach io to requests
 app.use((req, res, next) => { req.io = io; next(); });
@@ -29,8 +34,6 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/projects', require('./routes/projects'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/dashboard', require('./routes/dashboard'));
-
-app.get('/', (req, res) => res.json({ message: 'Team Task Manager API is running 🚀' }));
 
 // Error handling
 app.use(notFound);

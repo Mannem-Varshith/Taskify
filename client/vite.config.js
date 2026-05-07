@@ -19,6 +19,12 @@ export default defineConfig({
   preview: {
     port: 4173,
     host: true,
+    allowedHosts: [
+      'localhost',
+      '.railway.app',
+      '.up.railway.app',
+      'taskify-production-d013.up.railway.app',
+    ],
   },
   build: {
     outDir: 'dist',

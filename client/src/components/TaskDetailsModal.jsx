@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Calendar, Flag, User, Clock, MessageSquare, 
-  Edit2, Save, XCircle, Activity, CheckCircle2, AlertCircle 
+  Edit2, Save, XCircle, Activity, CheckCircle2, AlertCircle, Trash2 
 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -15,6 +15,8 @@ const TaskDetailsModal = ({ taskId, isOpen, onClose, onTaskUpdate, isAdmin, proj
   const [isEditing, setIsEditing] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Edit form states
   const [editForm, setEditForm] = useState({
@@ -98,6 +100,20 @@ const TaskDetailsModal = ({ taskId, isOpen, onClose, onTaskUpdate, isAdmin, proj
       if (onTaskUpdate) onTaskUpdate(res.data);
     } catch (error) {
       toast.error('Failed to update status');
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    try {
+      setIsDeleting(true);
+      await api.delete(`/tasks/${taskId}`);
+      toast.success('Task deleted successfully');
+      setShowDeleteConfirm(false);
+      onClose();
+      if (onTaskUpdate) onTaskUpdate(null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete task');
+      setIsDeleting(false);
     }
   };
 
@@ -290,7 +306,7 @@ const TaskDetailsModal = ({ taskId, isOpen, onClose, onTaskUpdate, isAdmin, proj
                     <div className="space-y-4">
                       {/* Edit/Save Buttons */}
                       {isAdmin && (
-                        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-900 rounded-lg p-4 border border-indigo-100 dark:border-gray-700">
+                        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-900 rounded-lg p-4 border border-indigo-100 dark:border-gray-700 space-y-2">
                           {isEditing ? (
                             <div className="flex gap-2">
                               <button
@@ -318,13 +334,22 @@ const TaskDetailsModal = ({ taskId, isOpen, onClose, onTaskUpdate, isAdmin, proj
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => setIsEditing(true)}
-                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                              Edit Task
-                            </button>
+                            <>
+                              <button
+                                onClick={() => setIsEditing(true)}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Edit Task
+                              </button>
+                              <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete Task
+                              </button>
+                            </>
                           )}
                         </div>
                       )}
@@ -496,6 +521,57 @@ const TaskDetailsModal = ({ taskId, isOpen, onClose, onTaskUpdate, isAdmin, proj
                 </div>
               </>
             ) : null}
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 rounded-2xl z-10">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md w-full border-2 border-red-200 dark:border-red-800"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Delete Task</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone</p>
+                    </div>
+                  </div>
+                  <p className="text-gray-700 dark:text-gray-300 mb-6">
+                    Are you sure you want to delete <span className="font-semibold">"{task?.title}"</span>? 
+                    This will permanently remove the task and all its comments and activity history.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={isDeleting}
+                      className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteTask}
+                      disabled={isDeleting}
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isDeleting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" />
+                          Delete Permanently
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

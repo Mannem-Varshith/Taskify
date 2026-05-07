@@ -189,13 +189,28 @@ const deleteTask = async (req, res) => {
     if (access.error) return res.status(access.status).json({ message: access.error });
     
     if (!access.isAdmin) {
-      return res.status(403).json({ message: 'Only project admin can delete tasks' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Only project admin can delete tasks' 
+      });
     }
+    
+    const taskTitle = task.title;
     
     if (req.io) req.io.to(task.project.toString()).emit('task:deleted', { taskId: task._id });
     await Task.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Task deleted successfully' });
-  } catch (error) { res.status(500).json({ message: error.message }); }
+    
+    console.log(`✅ Task deleted: "${taskTitle}" by ${req.user.name}`);
+    res.json({ 
+      success: true,
+      message: 'Task deleted successfully' 
+    });
+  } catch (error) { 
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    }); 
+  }
 };
 
 // POST /api/tasks/:id/comments

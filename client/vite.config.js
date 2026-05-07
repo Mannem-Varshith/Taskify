@@ -17,14 +17,9 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 4173,
-    host: true,
-    allowedHosts: [
-      'localhost',
-      '.railway.app',
-      '.up.railway.app',
-      'taskify-production-d013.up.railway.app',
-    ],
+    port: process.env.PORT || 4173,
+    host: '0.0.0.0',
+    strictPort: false,
   },
   build: {
     outDir: 'dist',

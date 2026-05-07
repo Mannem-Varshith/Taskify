@@ -6,13 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "postinstall": "node -e \"try{require('@rolldown/binding-linux-x64-gnu')}catch(e){console.log('Rolldown binding check:',e.message)}\""
+    "preview": "vite preview"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.1",
-    "typescript": "~6.0.2",
-    "vite": "^8.0.10"
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

@@ -91,7 +91,7 @@ const HeroSection = () => {
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
                 </div>
                 <div className="mx-auto bg-white dark:bg-gray-800 px-3 py-1 text-xs text-gray-500 rounded-md w-1/3 text-center truncate">
-                  app.taskify.com/dashboard
+                  taskify-production-live.up.railway.app/dashboard
                 </div>
               </div>
               

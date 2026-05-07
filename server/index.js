@@ -7,6 +7,18 @@ const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
+  process.exit(1);
+});
+
 const app = express();
 const server = http.createServer(app);
 
@@ -59,4 +71,13 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
-server.listen(PORT, HOST, () => console.log(`🚀 Server running on ${HOST}:${PORT}`));
+
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on ${HOST}:${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`MongoDB URI configured: ${process.env.MONGO_URI ? 'Yes' : 'No'}`);
+  console.log(`Client URL: ${process.env.CLIENT_URL || 'Not set'}`);
+}).on('error', (err) => {
+  console.error('❌ Server failed to start:', err);
+  process.exit(1);
+});

@@ -1,20 +1,57 @@
 import { useState, useEffect, useRef } from 'react';
-import { Menu, Moon, Sun, Bell, X } from 'lucide-react';
+import { Menu, Moon, Sun, Bell, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { io } from 'socket.io-client';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const Navbar = ({ toggleSidebar }) => {
   const { user } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const notificationRef = useRef(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+    
+    // Setup socket connection for real-time notifications
+    if (user?._id) {
+      socketRef.current = io(API_URL, { 
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5
+      });
+      
+      socketRef.current.on('connect', () => {
+        console.log('Socket connected for notifications');
+        // Join user's personal room for notifications
+        socketRef.current.emit('join:user', user._id);
+      });
+      
+      socketRef.current.on('notification:new', () => {
+        // Refresh notifications when new one arrives
+        fetchNotifications();
+      });
+      
+      socketRef.current.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
+      
+      return () => {
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+      };
+    }
+  }, [user?._id]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -34,25 +71,78 @@ const Navbar = ({ toggleSidebar }) => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await api.get('/dashboard/recent-activity');
-      const activities = res.data.slice(0, 5); // Get latest 5
-      setNotifications(activities);
-      setUnreadCount(activities.length);
+      const res = await api.get('/notifications');
+      setNotifications(res.data.notifications);
+      setUnreadCount(res.data.unreadCount);
     } catch (error) {
       console.error('Failed to fetch notifications');
     }
   };
 
-  const handleNotificationClick = () => {
+  const handleNotificationClick = async () => {
     setShowNotifications(!showNotifications);
-    if (!showNotifications) {
-      setUnreadCount(0); // Mark as read when opened
+    if (!showNotifications && unreadCount > 0) {
+      // Mark all as read when opened
+      try {
+        await api.put('/notifications/read-all');
+        setUnreadCount(0);
+        setNotifications(notifications.map(n => ({ ...n, read: true })));
+      } catch (error) {
+        console.error('Failed to mark notifications as read');
+      }
     }
   };
 
-  const clearNotifications = () => {
-    setNotifications([]);
-    setUnreadCount(0);
+  const handleNotificationItemClick = async (notification) => {
+    // Mark as read
+    if (!notification.read) {
+      try {
+        await api.put(`/notifications/${notification._id}/read`);
+      } catch (error) {
+        console.error('Failed to mark notification as read');
+      }
+    }
+    
+    // Navigate to link
+    if (notification.link) {
+      navigate(notification.link);
+      setShowNotifications(false);
+    }
+  };
+
+  const handleDeleteNotification = async (e, notificationId) => {
+    e.stopPropagation();
+    try {
+      await api.delete(`/notifications/${notificationId}`);
+      setNotifications(notifications.filter(n => n._id !== notificationId));
+      if (unreadCount > 0) {
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      console.error('Failed to delete notification');
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    try {
+      await Promise.all(notifications.map(n => api.delete(`/notifications/${n._id}`)));
+      setNotifications([]);
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Failed to clear notifications');
+    }
+  };
+
+  const getNotificationIcon = (type) => {
+    const icons = {
+      task_assigned: '📋',
+      task_comment: '💬',
+      task_completed: '✅',
+      task_status_changed: '🔄',
+      member_added: '👥',
+      task_due_soon: '⏰'
+    };
+    return icons[type] || '🔔';
   };
 
   return (
@@ -78,50 +168,63 @@ const Navbar = ({ toggleSidebar }) => {
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+              <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
             )}
           </button>
 
           {/* Notification Dropdown */}
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+            <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 max-h-[600px] flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Notifications
+                  Notifications {unreadCount > 0 && `(${unreadCount})`}
                 </h3>
                 {notifications.length > 0 && (
                   <button
-                    onClick={clearNotifications}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                    onClick={clearAllNotifications}
+                    className="text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium"
                   >
                     Clear all
                   </button>
                 )}
               </div>
 
-              <div className="max-h-96 overflow-y-auto">
+              <div className="overflow-y-auto flex-1">
                 {notifications.length > 0 ? (
-                  notifications.map((notification, idx) => (
+                  notifications.map((notification) => (
                     <div
-                      key={idx}
-                      className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      key={notification._id}
+                      onClick={() => handleNotificationItemClick(notification)}
+                      className={`p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${
+                        !notification.read ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
+                      }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-semibold text-xs flex-shrink-0">
-                          {notification.userName?.charAt(0).toUpperCase() || '?'}
+                        <div className="text-2xl flex-shrink-0">
+                          {getNotificationIcon(notification.type)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-900 dark:text-white">
-                            <span className="font-medium">{notification.userName}</span>
-                            <span className="text-gray-600 dark:text-gray-400"> {notification.action}</span>
+                            <span className="font-medium">{notification.sender?.name}</span>
+                            <span className="text-gray-600 dark:text-gray-400"> {notification.message}</span>
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                            {notification.projectTitle}
-                          </p>
+                          {notification.project && (
+                            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                              {notification.project.title}
+                            </p>
+                          )}
                           <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">
-                            {new Date(notification.timestamp).toLocaleString()}
+                            {new Date(notification.createdAt).toLocaleString()}
                           </p>
                         </div>
+                        <button
+                          onClick={(e) => handleDeleteNotification(e, notification._id)}
+                          className="text-gray-400 hover:text-red-500 p-1 rounded transition-colors flex-shrink-0"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -129,20 +232,12 @@ const Navbar = ({ toggleSidebar }) => {
                   <div className="p-8 text-center">
                     <Bell className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
                     <p className="text-sm text-gray-500 dark:text-gray-400">No notifications</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      You'll be notified when someone assigns you a task or comments
+                    </p>
                   </div>
                 )}
               </div>
-
-              {notifications.length > 0 && (
-                <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-                  <a
-                    href="/dashboard"
-                    className="block text-center text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
-                  >
-                    View all activity
-                  </a>
-                </div>
-              )}
             </div>
           )}
         </div>

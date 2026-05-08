@@ -1,5 +1,6 @@
 const Task = require('../models/Task');
 const Project = require('../models/Project');
+const { createNotification } = require('./notificationController');
 
 const checkAccess = async (projectId, userId) => {
   const project = await Project.findById(projectId);
@@ -91,6 +92,28 @@ const createTask = async (req, res) => {
     
     await task.populate('assignedTo', 'name email role');
     await task.populate('createdBy', 'name email role');
+    
+    // Create notification if task is assigned
+    if (assignedTo && assignedTo !== req.user._id.toString()) {
+      await createNotification({
+        recipient: assignedTo,
+        sender: req.user._id,
+        type: 'task_assigned',
+        message: `assigned you a task: "${title}"`,
+        task: task._id,
+        project: projectId,
+        link: `/projects/${projectId}/tasks`
+      });
+      
+      // Emit socket event for real-time notification
+      if (req.io) {
+        req.io.to(assignedTo.toString()).emit('notification:new', {
+          type: 'task_assigned',
+          message: `${req.user.name} assigned you a task: "${title}"`
+        });
+      }
+    }
+    
     if (req.io) req.io.to(projectId).emit('task:created', task);
     res.status(201).json(task);
   } catch (error) { res.status(500).json({ message: error.message }); }
@@ -163,6 +186,27 @@ const updateTask = async (req, res) => {
           activityMessage = 'Task reassigned';
           // Reset viewed flag when reassigned
           task.viewedByAssignedUser = false;
+          
+          // Create notification for new assignee
+          if (assignedTo !== req.user._id.toString()) {
+            await createNotification({
+              recipient: assignedTo,
+              sender: req.user._id,
+              type: 'task_assigned',
+              message: `assigned you a task: "${task.title}"`,
+              task: task._id,
+              project: task.project,
+              link: `/projects/${task.project}/tasks`
+            });
+            
+            // Real-time notification
+            if (req.io) {
+              req.io.to(assignedTo.toString()).emit('notification:new', {
+                type: 'task_assigned',
+                message: `${req.user.name} assigned you a task: "${task.title}"`
+              });
+            }
+          }
         }
       }
     }
@@ -173,6 +217,19 @@ const updateTask = async (req, res) => {
     await updated.populate('createdBy', 'name email role');
     await updated.populate('comments.user', 'name email role');
     await updated.populate('activityLog.user', 'name email');
+    
+    // Notify task creator when status changes to done
+    if (req.body.status === 'done' && task.createdBy.toString() !== req.user._id.toString()) {
+      await createNotification({
+        recipient: task.createdBy,
+        sender: req.user._id,
+        type: 'task_completed',
+        message: `completed the task: "${task.title}"`,
+        task: task._id,
+        project: task.project,
+        link: `/projects/${task.project}/tasks`
+      });
+    }
     
     if (req.io) req.io.to(task.project.toString()).emit('task:updated', updated);
     res.json(updated);
@@ -226,6 +283,42 @@ const addComment = async (req, res) => {
     task.activityLog.push({ user: req.user._id, action: 'Added a comment' });
     await task.save();
     await task.populate('comments.user', 'name email role');
+    
+    // Notify task assignee about comment (if not the commenter)
+    if (task.assignedTo && task.assignedTo.toString() !== req.user._id.toString()) {
+      await createNotification({
+        recipient: task.assignedTo,
+        sender: req.user._id,
+        type: 'task_comment',
+        message: `commented on task: "${task.title}"`,
+        task: task._id,
+        project: task.project,
+        link: `/projects/${task.project}/tasks`
+      });
+      
+      // Real-time notification
+      if (req.io) {
+        req.io.to(task.assignedTo.toString()).emit('notification:new', {
+          type: 'task_comment',
+          message: `${req.user.name} commented on task: "${task.title}"`
+        });
+      }
+    }
+    
+    // Also notify task creator if different from commenter and assignee
+    if (task.createdBy && 
+        task.createdBy.toString() !== req.user._id.toString() && 
+        task.createdBy.toString() !== task.assignedTo?.toString()) {
+      await createNotification({
+        recipient: task.createdBy,
+        sender: req.user._id,
+        type: 'task_comment',
+        message: `commented on task: "${task.title}"`,
+        task: task._id,
+        project: task.project,
+        link: `/projects/${task.project}/tasks`
+      });
+    }
     
     if (req.io) req.io.to(task.project.toString()).emit('task:updated', task);
     res.status(201).json(task.comments[task.comments.length - 1]);

@@ -77,11 +77,9 @@ const TaskDetailsModal = ({ taskId, isOpen, onClose, onTaskUpdate, isAdmin, proj
 
     try {
       setSubmittingComment(true);
-      const res = await api.post(`/tasks/${taskId}/comments`, { text: commentText });
-      setTask(prev => ({
-        ...prev,
-        comments: [...(prev.comments || []), res.data]
-      }));
+      await api.post(`/tasks/${taskId}/comments`, { text: commentText });
+      // Refresh the entire task to get updated comments with populated user data
+      await fetchTask();
       setCommentText('');
       toast.success('Comment added');
     } catch (error) {

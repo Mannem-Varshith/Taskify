@@ -85,6 +85,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/projects', require('./routes/projects'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // Error handling
 app.use(notFound);
@@ -101,6 +102,11 @@ io.on('connection', (socket) => {
 
   socket.on('leave:project', (projectId) => {
     socket.leave(projectId);
+  });
+
+  socket.on('join:user', (userId) => {
+    socket.join(userId);
+    console.log(`User joined personal notification room: ${userId}`);
   });
 
   socket.on('disconnect', () => {

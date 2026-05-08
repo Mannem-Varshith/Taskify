@@ -18,7 +18,7 @@
     @apply bg-gray-50 text-gray-900 transition-colors duration-200;
   }
 
-  body.dark {
+  .dark body {
     @apply bg-gray-900 text-gray-100;
   }
 }

@@ -23,51 +23,26 @@ const StatCard = ({ title, value, icon: Icon, colorClass }) => (
 const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
-  const [teamPerformance, setTeamPerformance] = useState(null);
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingTeam, setLoadingTeam] = useState(false);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchDashboardData = async () => {
       try {
-        const res = await api.get('/dashboard/stats');
-        setStats(res.data);
-        
-        // Auto-select first admin project for team performance
-        if (res.data.isAdmin && res.data.adminProjects && res.data.adminProjects.length > 0) {
-          setSelectedProject(res.data.adminProjects[0]);
-        }
+        const [statsRes, activityRes] = await Promise.all([
+          api.get('/dashboard/stats'),
+          api.get('/dashboard/recent-activity')
+        ]);
+        setStats(statsRes.data);
+        setRecentActivity(activityRes.data);
       } catch (error) {
-        toast.error('Failed to load dashboard statistics');
+        toast.error('Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     };
-    fetchStats();
+    fetchDashboardData();
   }, []);
-
-  useEffect(() => {
-    const fetchTeamPerformance = async () => {
-      if (!selectedProject || !stats?.isAdmin) return;
-      
-      setLoadingTeam(true);
-      try {
-        const res = await api.get(`/dashboard/team-performance/${selectedProject}`);
-        setTeamPerformance(res.data);
-      } catch (error) {
-        if (error.response?.status === 403) {
-          toast.error('Access denied. Only project admins can view team performance.');
-        } else {
-          toast.error('Failed to load team performance');
-        }
-      } finally {
-        setLoadingTeam(false);
-      }
-    };
-    
-    fetchTeamPerformance();
-  }, [selectedProject, stats?.isAdmin]);
 
   if (loading) {
     return (
@@ -79,31 +54,24 @@ const Dashboard = () => {
 
   if (!stats) return null;
 
-  const isAdmin = stats.isAdmin;
-
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {isAdmin ? 'Dashboard Overview' : 'My Dashboard'}
+            Welcome back, {user?.name}!
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {isAdmin ? 'Project analytics and team performance' : 'Your personal task overview'}
+            Here's your overview across all projects
           </p>
         </div>
-        {isAdmin && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium">
-            <Users className="w-4 h-4" />
-            Admin View
-          </div>
-        )}
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title={isAdmin ? "Total Tasks" : "My Tasks"} 
+          title="Total Tasks" 
           value={stats.totalTasks} 
           icon={ListTodo} 
           colorClass="bg-indigo-500" 
@@ -121,7 +89,7 @@ const Dashboard = () => {
           colorClass="bg-blue-500" 
         />
         <StatCard 
-          title={isAdmin ? "Overdue" : "Due Soon"} 
+          title="Overdue" 
           value={stats.overdueTasks} 
           icon={AlertCircle} 
           colorClass="bg-red-500" 
@@ -129,11 +97,11 @@ const Dashboard = () => {
       </div>
 
       {/* Charts Section */}
-      <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-2' : ''} gap-6 mt-8`}>
-        {/* Tasks by Status - Available to all users */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+        {/* Tasks by Status */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-            {isAdmin ? 'Tasks by Status' : 'My Tasks by Status'}
+            Tasks by Status
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -168,117 +136,53 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Tasks Per Project - ADMIN ONLY */}
-        {isAdmin && stats.projectStats && stats.projectStats.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Tasks Per Project</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats.projectStats}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                  <XAxis dataKey="name" stroke="#9ca3af" tick={{fill: '#9ca3af'}} />
-                  <YAxis stroke="#9ca3af" tick={{fill: '#9ca3af'}} allowDecimals={false} />
-                  <Tooltip 
-                    cursor={{fill: 'rgba(99, 102, 241, 0.1)'}}
-                    contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }}
-                  />
-                  <Bar dataKey="tasks" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        {/* Recent Activity */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Recent Activity</h3>
+          <div className="space-y-4 max-h-64 overflow-y-auto">
+            {recentActivity && recentActivity.length > 0 ? (
+              recentActivity.map((activity, idx) => (
+                <div key={idx} className="flex items-start gap-3 text-sm">
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-semibold text-xs flex-shrink-0">
+                    {activity.userName?.charAt(0).toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-gray-900 dark:text-white">
+                      <span className="font-medium">{activity.userName}</span>
+                      <span className="text-gray-600 dark:text-gray-400"> {activity.action}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                      {activity.projectTitle} • {new Date(activity.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center py-8">No recent activity</p>
+            )}
           </div>
-        )}
+        </div>
       </div>
-      
-      {/* Team Performance Section - ADMIN ONLY */}
-      {isAdmin && teamPerformance && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Team Performance - {teamPerformance.projectTitle}
-              </h3>
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {teamPerformance.totalMembers} members • {teamPerformance.totalTasks} tasks
-            </div>
-          </div>
-          
-          {loadingTeam ? (
-            <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
-            </div>
-          ) : teamPerformance.tasksPerUser && teamPerformance.tasksPerUser.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead>
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Member</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Tasks</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Completed</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">In Progress</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">To Do</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Completion Rate</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {teamPerformance.tasksPerUser.map((member, idx) => {
-                    const completionRate = member.tasks > 0 ? Math.round((member.completed / member.tasks) * 100) : 0;
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">{member.name}</span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">{member.email}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{member.tasks}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400 font-medium">{member.completed}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 dark:text-blue-400">{member.inProgress}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600 dark:text-orange-400">{member.todo}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          <div className="flex items-center">
-                            <span className="mr-2 font-medium">{completionRate}%</span>
-                            <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div 
-                                className="bg-indigo-600 h-2 rounded-full transition-all duration-300" 
-                                style={{ width: `${completionRate}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              No team members assigned to tasks yet
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Member-specific helpful message */}
-      {!isAdmin && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 mt-6">
-          <div className="flex items-start gap-3">
-            <ListTodo className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-            <div>
-              <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-1">
-                Your Personal Dashboard
-              </h4>
-              <p className="text-sm text-blue-700 dark:text-blue-400">
-                This dashboard shows your assigned tasks and personal progress. 
-                Team analytics are available to project administrators.
-              </p>
-            </div>
+      {/* Quick Actions */}
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 border border-indigo-100 dark:border-gray-700 rounded-xl p-6 mt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+              Ready to get started?
+            </h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              View your projects and manage tasks efficiently
+            </p>
           </div>
+          <a
+            href="/projects"
+            className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            Go to Projects
+          </a>
         </div>
-      )}
+      </div>
     </div>
   );
 };

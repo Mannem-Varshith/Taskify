@@ -15,24 +15,16 @@ const getStats = async (req, res) => {
     
     const allProjects = [...adminProjects, ...memberProjects];
     const projectIds = allProjects.map(p => p._id);
-    const isAdmin = adminProjects.length > 0;
 
-    // For members: only get tasks assigned to them
-    // For admins: get all tasks in their projects
-    let tasks;
-    if (isAdmin) {
-      tasks = await Task.find({ project: { $in: projectIds } })
-        .populate('assignedTo', 'name email')
-        .populate('project', 'title admin');
-    } else {
-      // Members only see their own tasks
-      tasks = await Task.find({ 
-        project: { $in: projectIds },
-        assignedTo: userId
-      })
-        .populate('assignedTo', 'name email')
-        .populate('project', 'title admin');
-    }
+    // Get all tasks user has access to (assigned or in their projects)
+    const tasks = await Task.find({ 
+      $or: [
+        { assignedTo: userId },
+        { project: { $in: projectIds } }
+      ]
+    })
+      .populate('assignedTo', 'name email')
+      .populate('project', 'title admin');
 
     const now = new Date();
     const totalTasks = tasks.length;
@@ -50,39 +42,58 @@ const getStats = async (req, res) => {
       { name: 'Done', value: completedTasks },
     ];
 
-    // Base response for all users
-    const response = {
+    res.json({
       totalTasks,
       completedTasks,
       inProgressTasks,
       todoTasks,
       overdueTasks,
       tasksByStatus,
-      isAdmin,
-      adminProjects: adminProjects.map(p => p._id.toString()),
-    };
+      totalProjects: allProjects.length,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-    // Admin-only data
-    if (isAdmin) {
-      // Tasks by priority
-      const tasksByPriority = [
-        { name: 'Low', value: tasks.filter(t => t.priority === 'low').length },
-        { name: 'Medium', value: tasks.filter(t => t.priority === 'medium').length },
-        { name: 'High', value: tasks.filter(t => t.priority === 'high').length },
-      ];
+// GET /api/dashboard/recent-activity
+const getRecentActivity = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Get projects where user is admin or member
+    const adminProjects = await Project.find({ admin: userId });
+    const memberProjects = await Project.find({ members: userId });
+    const allProjects = [...adminProjects, ...memberProjects];
+    const projectIds = allProjects.map(p => p._id);
 
-      // Tasks per project (only for projects where user is admin)
-      const projectStats = adminProjects.map(p => ({
-        name: p.title,
-        tasks: tasks.filter(t => t.project._id.toString() === p._id.toString()).length,
-      }));
+    // Get recent tasks with activity
+    const recentTasks = await Task.find({ project: { $in: projectIds } })
+      .sort({ updatedAt: -1 })
+      .limit(10)
+      .populate('createdBy', 'name')
+      .populate('assignedTo', 'name')
+      .populate('project', 'title')
+      .populate('activityLog.user', 'name');
 
-      response.tasksByPriority = tasksByPriority;
-      response.projectStats = projectStats;
-      response.totalProjects = allProjects.length;
-    }
+    const activities = [];
+    
+    recentTasks.forEach(task => {
+      if (task.activityLog && task.activityLog.length > 0) {
+        const latestActivity = task.activityLog[task.activityLog.length - 1];
+        activities.push({
+          userName: latestActivity.user?.name || 'Unknown',
+          action: latestActivity.action,
+          projectTitle: task.project?.title || 'Unknown Project',
+          timestamp: latestActivity.createdAt || task.updatedAt
+        });
+      }
+    });
 
-    res.json(response);
+    // Sort by timestamp and limit to 10
+    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    res.json(activities.slice(0, 10));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -147,4 +158,4 @@ const getTeamPerformance = async (req, res) => {
   }
 };
 
-module.exports = { getStats, getTeamPerformance };
+module.exports = { getStats, getRecentActivity, getTeamPerformance };

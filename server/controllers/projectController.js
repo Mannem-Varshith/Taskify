@@ -94,4 +94,34 @@ const deleteProject = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-module.exports = { getProjects, getProject, createProject, updateMembers, deleteProject };
+// GET /api/projects/:id/stats
+const getProjectStats = async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: 'Project not found' });
+    
+    // Check access
+    const isAdmin = project.admin.toString() === req.user._id.toString();
+    const isMember = project.members.some(m => m.toString() === req.user._id.toString());
+    if (!isAdmin && !isMember) return res.status(403).json({ message: 'Access denied' });
+    
+    // Get tasks for this project only
+    const tasks = await Task.find({ project: req.params.id });
+    
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.status === 'done').length;
+    const inProgressTasks = tasks.filter(t => t.status === 'inprogress').length;
+    const todoTasks = tasks.filter(t => t.status === 'todo').length;
+    
+    res.json({
+      totalTasks,
+      completedTasks,
+      inProgressTasks,
+      todoTasks
+    });
+  } catch (error) { 
+    res.status(500).json({ message: error.message }); 
+  }
+};
+
+module.exports = { getProjects, getProject, createProject, updateMembers, deleteProject, getProjectStats };

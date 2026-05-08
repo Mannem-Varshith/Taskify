@@ -26,8 +26,11 @@ const Navbar = ({ toggleSidebar }) => {
       socketRef.current = io(API_URL, { 
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 10000,
+        reconnectionAttempts: 5,
+        timeout: 20000,
+        autoConnect: true
       });
       
       socketRef.current.on('connect', () => {
@@ -42,7 +45,15 @@ const Navbar = ({ toggleSidebar }) => {
       });
       
       socketRef.current.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
+        console.error('Socket connection error:', error.message);
+      });
+      
+      socketRef.current.on('reconnect_attempt', (attemptNumber) => {
+        console.log(`Reconnection attempt ${attemptNumber}`);
+      });
+      
+      socketRef.current.on('reconnect_failed', () => {
+        console.error('Socket reconnection failed after max attempts');
       });
       
       return () => {
